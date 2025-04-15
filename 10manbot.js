@@ -84,6 +84,11 @@ client.on(Events.InteractionCreate, async interaction => {
     // Handle StringSelectMenu interactions
     if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'select_captains') {
+            // Restrict captain selection to the user who ran !pickcaptains
+            if (interaction.user.id !== pickCaptainsInitiator) {
+                await interaction.reply({ content: 'Only the user who initiated the draft can select captains.', ephemeral: true });
+                return;
+            }
             const selectedIds = interaction.values;
             draftingQueue = [...selectedIds];
             selectedIds.forEach(id => { playerSelections[id] = 0; });
@@ -122,6 +127,11 @@ client.on(Events.InteractionCreate, async interaction => {
             return;
         }
         if (interaction.customId === 'select_first_pick') {
+            // Restrict first pick selection to the user who ran !pickcaptains
+            if (interaction.user.id !== pickCaptainsInitiator) {
+                await interaction.reply({ content: 'Only the user who initiated the draft can select first pick.', ephemeral: true });
+                return;
+            }
             firstPickCaptain = interaction.values[0];
             // Reorder draftingQueue so firstPickCaptain is first
             draftingQueue = [firstPickCaptain, ...draftingQueue.filter(id => id !== firstPickCaptain)];
@@ -144,11 +154,11 @@ client.on(Events.InteractionCreate, async interaction => {
             return;
         }
         if (interaction.customId === 'select_players') {
-            // Bypass captain restriction for testing
-            // if (interaction.user.id !== currentCaptain) {
-            //     await interaction.reply({ content: 'Only the current captain can make selections!', ephemeral: true });
-            //     return;
-            // }
+            // Restrict draft picks to the current captain
+            if (interaction.user.id !== currentCaptain) {
+                await interaction.reply({ content: 'Only the current captain can make selections!', ephemeral: true });
+                return;
+            }
             const selectedPlayerIds = interaction.values;
             if (!teams[currentCaptain]) teams[currentCaptain] = [];
             const actualSelections = selectedPlayerIds;
@@ -180,13 +190,13 @@ client.on(Events.InteractionCreate, async interaction => {
     }
     // Handle Button interactions
     if (interaction.isButton()) {
-        // Bypass captain restriction for testing
-        // if (interaction.customId.startsWith('pick_player_') || interaction.customId === 'done_picking') {
-        //     if (interaction.user.id !== currentCaptain) {
-        //         await interaction.reply({ content: 'Only the current captain can make selections!', ephemeral: true });
-        //         return;
-        //     }
-        // }
+        // Restrict draft picks to the current captain
+        if (interaction.customId.startsWith('pick_player_') || interaction.customId === 'done_picking') {
+            if (interaction.user.id !== currentCaptain) {
+                await interaction.reply({ content: 'Only the current captain can make selections!', ephemeral: true });
+                return;
+            }
+        }
         if (interaction.customId.startsWith('pick_player_')) {
             const playerId = interaction.customId.replace('pick_player_', '');
             if (!teams[currentCaptain]) teams[currentCaptain] = [];
