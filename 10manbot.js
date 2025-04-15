@@ -16,7 +16,11 @@ const client = new Client({ intents: [
 partials: [Partials.Message, Partials.Channel, Partials.GuildMember],
  });
 
- const role = '1361013468731539690'; // Scrim Players ID
+require('dotenv').config();
+
+console.log('Token:', process.env.DISCORD_BOT_TOKEN);
+const token = process.env.DISCORD_BOT_TOKEN;
+client.login(token);
 
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}`);
@@ -98,8 +102,3 @@ client.on(Events.InteractionCreate, async interaction => {
         });
     }
 });
-
-
-
-
-client.login('MTM2MTMyNDk1MTQ1Nzc2MzQ2OA.G654Fs.9LXdkE6MvzNIPxXIDZs4rPM2r4G48M0sHBpWPQ');
