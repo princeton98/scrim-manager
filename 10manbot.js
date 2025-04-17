@@ -8,6 +8,8 @@ const {
     ButtonBuilder,
     ButtonStyle
 } = require('discord.js');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
+const path = require('path');
 
 const client = new Client({
     intents: [
@@ -81,12 +83,15 @@ client.on('messageCreate', async (message) => {
 });
 
 client.on(Events.InteractionCreate, async interaction => {
+    // NBA draft chime link
+    const DRAFT_NOISE_LINK = 'https://www.youtube.com/watch?v=2nYxo5v4Re8'; // Replace with your preferred sound
+
     // Handle StringSelectMenu interactions
     if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'select_captains') {
             // Restrict captain selection to the user who ran !pickcaptains
             if (interaction.user.id !== pickCaptainsInitiator) {
-                await interaction.reply({ content: 'Only the user who initiated the draft can select captains.', ephemeral: true });
+                await interaction.reply({ content: 'Only the user who initiated the draft can select captains.', flags: 64 });
                 return;
             }
             const selectedIds = interaction.values;
@@ -129,7 +134,7 @@ client.on(Events.InteractionCreate, async interaction => {
         if (interaction.customId === 'select_first_pick') {
             // Restrict first pick selection to the user who ran !pickcaptains
             if (interaction.user.id !== pickCaptainsInitiator) {
-                await interaction.reply({ content: 'Only the user who initiated the draft can select first pick.', ephemeral: true });
+                await interaction.reply({ content: 'Only the user who initiated the draft can select first pick.', flags: 64 });
                 return;
             }
             firstPickCaptain = interaction.values[0];
@@ -145,7 +150,7 @@ client.on(Events.InteractionCreate, async interaction => {
             const guild = interaction.guild;
             await guild.members.fetch();
             const role = guild.roles.cache.get('1361013468731539690');
-            if (!role) return interaction.followUp('Role not found.');
+            if (!role) { leaveDraftVoiceChannel(); return interaction.followUp('Role not found.'); }
             const members = Array.from(role.members.values());
             availablePlayers = members
                 .filter(member => !draftingQueue.includes(member.id))
@@ -156,7 +161,7 @@ client.on(Events.InteractionCreate, async interaction => {
         if (interaction.customId === 'select_players') {
             // Restrict draft picks to the current captain
             if (interaction.user.id !== currentCaptain) {
-                await interaction.reply({ content: 'Only the current captain can make selections!', ephemeral: true });
+                await interaction.reply({ content: 'Only the current captain can make selections!', flags: 64 });
                 return;
             }
             const selectedPlayerIds = interaction.values;
@@ -173,8 +178,6 @@ client.on(Events.InteractionCreate, async interaction => {
             await interaction.reply({
                 content: `✅ Players selected by <@${currentCaptain}>: ${selectedNames.join(', ')}`,
             });
-            // Remove forced switch restriction for testing
-            // if (playerSelections[currentCaptain] >= 5) { ... }
             if (availablePlayers.length === 0) {
                 await presentTeams(interaction);
                 return;
@@ -193,7 +196,7 @@ client.on(Events.InteractionCreate, async interaction => {
         // Restrict draft picks to the current captain
         if (interaction.customId.startsWith('pick_player_') || interaction.customId === 'done_picking') {
             if (interaction.user.id !== currentCaptain) {
-                await interaction.reply({ content: 'Only the current captain can make selections!', ephemeral: true });
+                await interaction.reply({ content: 'Only the current captain can make selections!', flags: 64 });
                 return;
             }
         }
@@ -202,7 +205,7 @@ client.on(Events.InteractionCreate, async interaction => {
             if (!teams[currentCaptain]) teams[currentCaptain] = [];
             // Remove max picks restriction for testing
             // if (playerSelections[currentCaptain] >= 5) {
-            //     await interaction.reply({ content: 'You have already selected 5 players!', ephemeral: true });
+            //     await interaction.reply({ content: 'You have already selected 5 players!', flags: 64 });
             //     return;
             // }
             teams[currentCaptain].push(playerId);
@@ -220,6 +223,8 @@ client.on(Events.InteractionCreate, async interaction => {
         }
         if (interaction.customId === 'done_picking') {
             await interaction.update({ content: `<@${currentCaptain}> has finished their selections.`, components: [] });
+            // Draft noise after done picking
+            await interaction.followUp({ content: `:musical_note: Draft noise: ${DRAFT_NOISE_LINK}` });
             // Switch to next captain or finish draft
             const previousCaptain = currentCaptain;
             const unfinishedCaptains = draftingQueue.filter(captain => availablePlayers.length > 0);
@@ -235,6 +240,62 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
+
+// Persistent voice connection and player for the draft
+let draftVoiceConnection = null;
+let draftAudioPlayer = null;
+
+async function playDraftNoise(guild) {
+    const channelId = '1359003673836916901'; // General voice channel (updated)
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel || !(typeof channel.isVoiceBased === 'function' ? channel.isVoiceBased() : channel.type === 2)) {
+        console.log('Voice channel not found or not a voice channel.');
+        return;
+    }
+    // Log channel info and permissions
+    console.log('Voice channel found:', channel.name, channel.id);
+    const botMember = guild.members.me;
+    const permissions = channel.permissionsFor(botMember);
+    if (!permissions.has('Connect') || !permissions.has('Speak')) {
+        console.log('Bot is missing Connect or Speak permissions in the channel.');
+        return;
+    }
+    // Only join if not already connected
+    if (!draftVoiceConnection || draftVoiceConnection.state.status === 'destroyed') {
+        draftVoiceConnection = joinVoiceChannel({
+            channelId: channel.id,
+            guildId: guild.id,
+            adapterCreator: guild.voiceAdapterCreator || guild.adapters,
+            selfDeaf: false
+        });
+        draftAudioPlayer = createAudioPlayer();
+        draftVoiceConnection.subscribe(draftAudioPlayer);
+    }
+    try {
+        await entersState(draftVoiceConnection, VoiceConnectionStatus.Ready, 15_000); // Increased timeout
+        const filePath = path.join(__dirname, 'music', 'nba-draft.mp3');
+        console.log('Attempting to play file:', filePath);
+        const resource = createAudioResource(filePath);
+        draftAudioPlayer.play(resource);
+        draftAudioPlayer.on('error', error => {
+            console.error('Audio player error:', error);
+        });
+    } catch (e) {
+        console.error('Voice connection or audio error:', e);
+        if (draftVoiceConnection) draftVoiceConnection.destroy();
+        draftVoiceConnection = null;
+        draftAudioPlayer = null;
+    }
+}
+
+// Call this when the draft is over or on error
+function leaveDraftVoiceChannel() {
+    if (draftVoiceConnection) {
+        draftVoiceConnection.destroy();
+        draftVoiceConnection = null;
+        draftAudioPlayer = null;
+    }
+}
 
 // Present teams at the end of the draft
 async function presentTeams(interaction) {
@@ -259,13 +320,14 @@ async function presentTeams(interaction) {
         result += `\n\n<@${secondCaptain}> and their team have side selection for the first map.`;
     }
     await interaction.followUp({ content: result });
+    leaveDraftVoiceChannel(); // Leave after draft is done
 }
 
 //functions
 
-
 // Now from the captains, i want them to select their players, and give them the option to select a multitude of players, and is it possible to add the nba draft noise to this feature?
 async function askForPlayerSelection(captain, interaction) {
+    await playDraftNoise(interaction.guild);
     const guild = interaction.guild;
     await guild.members.fetch();
     const options = availablePlayers.slice(0, 25).map(player => {
