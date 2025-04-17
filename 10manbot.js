@@ -36,7 +36,7 @@ let firstPickCaptain = null; // Track which captain has first pick
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}`);
 
-    const channel = client.channels.cache.get('1361679289967186073'); // testing channel message
+    const channel = client.channels.cache.get('1361154224704196778'); // updated channel id
     if (channel) {
         channel.send("Hey, I'm online and ready to go!");
     } else {
@@ -86,7 +86,7 @@ client.on(Events.InteractionCreate, async interaction => {
         if (interaction.customId === 'select_captains') {
             // Restrict captain selection to the user who ran !pickcaptains
             if (interaction.user.id !== pickCaptainsInitiator) {
-                await interaction.reply({ content: 'Only the user who initiated the draft can select captains.', ephemeral: true });
+                await interaction.reply({ content: 'Only the user who initiated the draft can select captains.', flags: 64 });
                 return;
             }
             const selectedIds = interaction.values;
@@ -129,7 +129,7 @@ client.on(Events.InteractionCreate, async interaction => {
         if (interaction.customId === 'select_first_pick') {
             // Restrict first pick selection to the user who ran !pickcaptains
             if (interaction.user.id !== pickCaptainsInitiator) {
-                await interaction.reply({ content: 'Only the user who initiated the draft can select first pick.', ephemeral: true });
+                await interaction.reply({ content: 'Only the user who initiated the draft can select first pick.', flags: 64 });
                 return;
             }
             firstPickCaptain = interaction.values[0];
@@ -156,7 +156,7 @@ client.on(Events.InteractionCreate, async interaction => {
         if (interaction.customId === 'select_players') {
             // Restrict draft picks to the current captain
             if (interaction.user.id !== currentCaptain) {
-                await interaction.reply({ content: 'Only the current captain can make selections!', ephemeral: true });
+                await interaction.reply({ content: 'Only the current captain can make selections!', flags: 64 });
                 return;
             }
             const selectedPlayerIds = interaction.values;
@@ -193,7 +193,7 @@ client.on(Events.InteractionCreate, async interaction => {
         // Restrict draft picks to the current captain
         if (interaction.customId.startsWith('pick_player_') || interaction.customId === 'done_picking') {
             if (interaction.user.id !== currentCaptain) {
-                await interaction.reply({ content: 'Only the current captain can make selections!', ephemeral: true });
+                await interaction.reply({ content: 'Only the current captain can make selections!', flags: 64 });
                 return;
             }
         }
@@ -202,7 +202,7 @@ client.on(Events.InteractionCreate, async interaction => {
             if (!teams[currentCaptain]) teams[currentCaptain] = [];
             // Remove max picks restriction for testing
             // if (playerSelections[currentCaptain] >= 5) {
-            //     await interaction.reply({ content: 'You have already selected 5 players!', ephemeral: true });
+            //     await interaction.reply({ content: 'You have already selected 5 players!', flags: 64 });
             //     return;
             // }
             teams[currentCaptain].push(playerId);
